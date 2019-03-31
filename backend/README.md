@@ -131,6 +131,7 @@ If you already have a home server running you can also add the MiFlo backend ont
 * Open firewall port `1883/tcp`:
   ```
   firewall-cmd --permanent --zone=public --add-port=1883/tcp
+  firewall-cmd --reload
   ```
 * Create a `miflo` user which will run the backend scripts:
   ```
