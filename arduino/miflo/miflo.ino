@@ -177,11 +177,12 @@ void jingle( int n = 0 ) {
 }
 
 void parse_command( char* json ) {
-  StaticJsonBuffer<1024> jsonBuffer;
+  StaticJsonDocument<1024> jsonBuffer;
 
-  JsonObject& root = jsonBuffer.parseObject(json);
+  //JsonObject& root = jsonBuffer.parseObject(json);
+  deserializeJson(jsonBuffer, json);
 
-  const char* type = root["type"];
+  const char* type = jsonBuffer["type"];
 
   if ( strcmp( type, "reset" ) == 0 ) {
     add_log("Running reset");
@@ -191,20 +192,20 @@ void parse_command( char* json ) {
     sample();
   } else if ( strcmp( type, "settime" ) == 0 ) {
     add_log("Setting the clock");
-    int hour = root["hour"];
-    int minute = root["minute"];
+    int hour = jsonBuffer["hour"];
+    int minute = jsonBuffer["minute"];
     String timestring = format_time( hour, minute, 0 );
     rtc.adjust(DateTime(__DATE__, string2char(timestring)));
   } else if ( strcmp( type, "events" ) == 0 ) {
     add_log("Caching events");
     cache.clear();
-    for ( int i = 0; i < root["events"].size(); i++ ) {
-      int hour = root["events"][i]["hour"];
-      int minute = root["events"][i]["minute"];
-      int second = root["events"][i]["second"];
+    for ( int i = 0; i < jsonBuffer["events"].size(); i++ ) {
+      int hour = jsonBuffer["events"][i]["hour"];
+      int minute = jsonBuffer["events"][i]["minute"];
+      int second = jsonBuffer["events"][i]["second"];
       int time = hour * 10000 + minute * 100 + second;
-      const char* task = root["events"][i]["task"];
-      cache[ time ] = task;
+      //const char* task = jsonBuffer["events"][i]["task"];
+      cache[ time ] = String((const char*)jsonBuffer["events"][i]["task"]);
     }
   } else if ( strcmp( type, "log" ) == 0 ) {
     add_log("Showing log");
@@ -218,13 +219,13 @@ void parse_command( char* json ) {
     points--;
   } else if ( strcmp( type, "todo" ) == 0 ) {
     add_log("Running todo");
-    todo_texts[ 0 ] = (const char*)root["job"][0];
+    todo_texts[ 0 ] = (const char*)jsonBuffer["job"][0];
     todo_jpgs[ 0 ] = job2jpg( todo_texts[ 0 ] );
-    todo_texts[ 1 ] = (const char*)root["job"][1];
+    todo_texts[ 1 ] = (const char*)jsonBuffer["job"][1];
     todo_jpgs[ 1 ] = job2jpg( todo_texts[ 1 ] );
-    todo_texts[ 2 ] = (const char*)root["job"][2];
+    todo_texts[ 2 ] = (const char*)jsonBuffer["job"][2];
     todo_jpgs[ 2 ] = job2jpg( todo_texts[ 2 ] );
-    todo_texts[ 3 ] = (const char*)root["job"][3];
+    todo_texts[ 3 ] = (const char*)jsonBuffer["job"][3];
     todo_jpgs[ 3 ] = job2jpg( todo_texts[ 3 ] );
     todo_done[ 0 ] = ( todo_texts[ 0 ] == "" );
     todo_done[ 1 ] = ( todo_texts[ 1 ] == "" );
@@ -233,10 +234,10 @@ void parse_command( char* json ) {
     state = TODO_STATE;
   } else if ( strcmp( type, "timetimer" ) == 0 ) {
     add_log("Running timetimer");
-    int minutes = root["minutes"];
+    int minutes = jsonBuffer["minutes"];
     Serial.print( "minutes: " );
     Serial.println( minutes );
-    const char* job = root["job"];
+    const char* job = jsonBuffer["job"];
     strcpy(current_job_string, job);
     add_log( job );
     DateTime now = rtc.now();
@@ -245,12 +246,12 @@ void parse_command( char* json ) {
     jingle(1);
   } else if ( strcmp( type, "reminder" ) == 0 ) {
     add_log("Running reminder");
-    const char* job = root["message"];
+    const char* job = jsonBuffer["message"];
     strcpy(current_job_string, job);
     state = REMINDER_STATE;
   } else if ( strcmp( type, "alarm" ) == 0 ) {
     add_log("Running alarm");
-    const char* job = root["message"];
+    const char* job = jsonBuffer["message"];
     strcpy(current_job_string, job);
     state = ALARM_STATE;
   }
