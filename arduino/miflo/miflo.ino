@@ -1,13 +1,35 @@
-#define SECONDS_PER_MINUTE 60
-
-// THE LINE BELOW SHOULD OVERRIDE PUBSUBCLIENT'S BUT DOESN'T REALLY DO IT ...
-#define MQTT_MAX_PACKET_SIZE 1024
 
 #include <EEPROM.h>
 #include <SPI.h>
 #include <GD2.h>
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#elif  defined(ESP32)
+#include <WiFi.h>
+#endif
+#include <PubSubClient.h>
+#include <RTClib.h>
+#include <Wire.h>
+#include <ArduinoJson.h>
+#include <vector>
+#include <map>
 
+#include "miflo.h"
 #include "m_cool.h"
+#include "settings.h"
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+RTC_DS1307 rtc;
+std::vector< String > log_history;
+std::map< int, String > cache;
+
+//int samplebases[26] = {F_DDUIM, F_WAUW, F_BOL, F_UITST, F_GO, F_KOMAAN, G_COOL, G_FORMID, G_MACHTI, G_STIEVA, G_WOEW, G_DDUIM2, G_GOED, G_SUPER, G_WOOP, G_ALLEZ, G_DEMAX, G_GOEDZO, G_PRIMA, G_TSJING, G_ZOGOED, G_BOL, G_FANTAS, G_HOPLA, G_SCOOL, G_WIII};
+//int samplefreqs[26] = {F_DDUIM_FREQ, F_WAUW_FREQ, F_BOL_FREQ, F_UITST_FREQ, F_GO_FREQ, F_KOMAAN_FREQ, G_COOL_FREQ, G_FORMID_FREQ, G_MACHTI_FREQ, G_STIEVA_FREQ, G_WOEW_FREQ, G_DDUIM2_FREQ, G_GOED_FREQ, G_SUPER_FREQ, G_WOOP_FREQ, G_ALLEZ_FREQ, G_DEMAX_FREQ, G_GOEDZO_FREQ, G_PRIMA_FREQ, G_TSJING_FREQ, G_ZOGOED_FREQ, G_BOL_FREQ, G_FANTAS_FREQ, G_HOPLA_FREQ, G_SCOOL_FREQ, G_WIII_FREQ};
+//int samplelengths[26] = {F_DDUIM_LENGTH, F_WAUW_LENGTH, F_BOL_LENGTH, F_UITST_LENGTH, F_GO_LENGTH, F_KOMAAN_LENGTH, G_COOL_LENGTH, G_FORMID_LENGTH, G_MACHTI_LENGTH, G_STIEVA_LENGTH, G_WOEW_LENGTH, G_DDUIM2_LENGTH, G_GOED_LENGTH, G_SUPER_LENGTH, G_WOOP_LENGTH, G_ALLEZ_LENGTH, G_DEMAX_LENGTH, G_GOEDZO_LENGTH, G_PRIMA_LENGTH, G_TSJING_LENGTH, G_ZOGOED_LENGTH, G_BOL_LENGTH, G_FANTAS_LENGTH, G_HOPLA_LENGTH, G_SCOOL_LENGTH, G_WIII_LENGTH};
+int samplebases[20] = {G_COOL, G_FORMID, G_MACHTI, G_STIEVA, G_WOEW, G_DDUIM2, G_GOED, G_SUPER, G_WOOP, G_ALLEZ, G_DEMAX, G_GOEDZO, G_PRIMA, G_TSJING, G_ZOGOED, G_BOL, G_FANTAS, G_HOPLA, G_SCOOL, G_WIII};
+int samplefreqs[20] = {G_COOL_FREQ, G_FORMID_FREQ, G_MACHTI_FREQ, G_STIEVA_FREQ, G_WOEW_FREQ, G_DDUIM2_FREQ, G_GOED_FREQ, G_SUPER_FREQ, G_WOOP_FREQ, G_ALLEZ_FREQ, G_DEMAX_FREQ, G_GOEDZO_FREQ, G_PRIMA_FREQ, G_TSJING_FREQ, G_ZOGOED_FREQ, G_BOL_FREQ, G_FANTAS_FREQ, G_HOPLA_FREQ, G_SCOOL_FREQ, G_WIII_FREQ};
+int samplelengths[20] = {G_COOL_LENGTH, G_FORMID_LENGTH, G_MACHTI_LENGTH, G_STIEVA_LENGTH, G_WOEW_LENGTH, G_DDUIM2_LENGTH, G_GOED_LENGTH, G_SUPER_LENGTH, G_WOOP_LENGTH, G_ALLEZ_LENGTH, G_DEMAX_LENGTH, G_GOEDZO_LENGTH, G_PRIMA_LENGTH, G_TSJING_LENGTH, G_ZOGOED_LENGTH, G_BOL_LENGTH, G_FANTAS_LENGTH, G_HOPLA_LENGTH, G_SCOOL_LENGTH, G_WIII_LENGTH};
 
 // notes in the melody:
 int melody[] = {
@@ -19,32 +41,6 @@ int noteDurations[] = {
   4, 8, 8, 4, 4, 4, 4, 4
 };
 
-
-
-#include "settings.h"
-
-#include <ESP8266WiFi.h>
-WiFiClient espClient;
-
-#include <PubSubClient.h>
-PubSubClient client(espClient);
-
-#include <Wire.h>
-#include "RTClib.h"
-RTC_DS1307 rtc;
-
-#include <ArduinoJson.h>
-
-#define COLOR_BEIGE 0xffe9ac
-#define COLOR_GREEN 0x588751
-#define COLOR_RED 0xd41942
-#define COLOR_ORANGE 0xff6f25
-#define COLOR_YELLOW 0xffc700
-#define COLOR_BLUE 0x2b19d4
-#define COLOR_BLACK 0x030302
-#define COLOR_WHITE 0xffe9e6
-
-#define GOED_AANTAL 16
 char* goed[GOED_AANTAL] = { "fantastisch", "buitengewoon", "geweldig", "fenomenaal", "toverachtig", "wonderlijk", "uitstekend", "eersteklas", "opperbest", "excellent", "briljant", "grandioos", "machtig", "sensationeel", "volmaakt", "uitzonderlijk" };
 int goed1, goed2;
 
@@ -96,8 +92,14 @@ char* int2char(int n) {
   return s;
 }
 
-#include <vector>
-std::vector< String > log_history;
+void show_log() {
+  int x = 0;
+  for ( std::vector< String >::iterator i = log_history.begin(); i != log_history.end(); i++ ) {
+    GD.cmd_text(5, 25 + x * 14, 20, 0, string2char(*i));
+    x++;
+  }
+}
+
 void add_log( String message ) {
   Serial.println( message );
   log_history.push_back( message );
@@ -113,15 +115,7 @@ void add_log( String message ) {
   }
 }
 
-void show_log() {
-  int x = 0;
-  for ( std::vector< String >::iterator i = log_history.begin(); i != log_history.end(); i++ ) {
-    GD.cmd_text(5, 25 + x * 14, 20, 0, string2char(*i));
-    x++;
-  }
-}
-
-void playmelody() {
+/*void playmelody() {
   // iterate over the notes of the melody:
   for (int thisNote = 0; thisNote < 8; thisNote++) {
 
@@ -138,14 +132,7 @@ void playmelody() {
     // stop the tone playing:
     noTone(15);
   }
-}
-
-//int samplebases[26] = {F_DDUIM, F_WAUW, F_BOL, F_UITST, F_GO, F_KOMAAN, G_COOL, G_FORMID, G_MACHTI, G_STIEVA, G_WOEW, G_DDUIM2, G_GOED, G_SUPER, G_WOOP, G_ALLEZ, G_DEMAX, G_GOEDZO, G_PRIMA, G_TSJING, G_ZOGOED, G_BOL, G_FANTAS, G_HOPLA, G_SCOOL, G_WIII};
-//int samplefreqs[26] = {F_DDUIM_FREQ, F_WAUW_FREQ, F_BOL_FREQ, F_UITST_FREQ, F_GO_FREQ, F_KOMAAN_FREQ, G_COOL_FREQ, G_FORMID_FREQ, G_MACHTI_FREQ, G_STIEVA_FREQ, G_WOEW_FREQ, G_DDUIM2_FREQ, G_GOED_FREQ, G_SUPER_FREQ, G_WOOP_FREQ, G_ALLEZ_FREQ, G_DEMAX_FREQ, G_GOEDZO_FREQ, G_PRIMA_FREQ, G_TSJING_FREQ, G_ZOGOED_FREQ, G_BOL_FREQ, G_FANTAS_FREQ, G_HOPLA_FREQ, G_SCOOL_FREQ, G_WIII_FREQ};
-//int samplelengths[26] = {F_DDUIM_LENGTH, F_WAUW_LENGTH, F_BOL_LENGTH, F_UITST_LENGTH, F_GO_LENGTH, F_KOMAAN_LENGTH, G_COOL_LENGTH, G_FORMID_LENGTH, G_MACHTI_LENGTH, G_STIEVA_LENGTH, G_WOEW_LENGTH, G_DDUIM2_LENGTH, G_GOED_LENGTH, G_SUPER_LENGTH, G_WOOP_LENGTH, G_ALLEZ_LENGTH, G_DEMAX_LENGTH, G_GOEDZO_LENGTH, G_PRIMA_LENGTH, G_TSJING_LENGTH, G_ZOGOED_LENGTH, G_BOL_LENGTH, G_FANTAS_LENGTH, G_HOPLA_LENGTH, G_SCOOL_LENGTH, G_WIII_LENGTH};
-int samplebases[20] = {G_COOL, G_FORMID, G_MACHTI, G_STIEVA, G_WOEW, G_DDUIM2, G_GOED, G_SUPER, G_WOOP, G_ALLEZ, G_DEMAX, G_GOEDZO, G_PRIMA, G_TSJING, G_ZOGOED, G_BOL, G_FANTAS, G_HOPLA, G_SCOOL, G_WIII};
-int samplefreqs[20] = {G_COOL_FREQ, G_FORMID_FREQ, G_MACHTI_FREQ, G_STIEVA_FREQ, G_WOEW_FREQ, G_DDUIM2_FREQ, G_GOED_FREQ, G_SUPER_FREQ, G_WOOP_FREQ, G_ALLEZ_FREQ, G_DEMAX_FREQ, G_GOEDZO_FREQ, G_PRIMA_FREQ, G_TSJING_FREQ, G_ZOGOED_FREQ, G_BOL_FREQ, G_FANTAS_FREQ, G_HOPLA_FREQ, G_SCOOL_FREQ, G_WIII_FREQ};
-int samplelengths[20] = {G_COOL_LENGTH, G_FORMID_LENGTH, G_MACHTI_LENGTH, G_STIEVA_LENGTH, G_WOEW_LENGTH, G_DDUIM2_LENGTH, G_GOED_LENGTH, G_SUPER_LENGTH, G_WOOP_LENGTH, G_ALLEZ_LENGTH, G_DEMAX_LENGTH, G_GOEDZO_LENGTH, G_PRIMA_LENGTH, G_TSJING_LENGTH, G_ZOGOED_LENGTH, G_BOL_LENGTH, G_FANTAS_LENGTH, G_HOPLA_LENGTH, G_SCOOL_LENGTH, G_WIII_LENGTH};
+}*/
 
 void sample() {
   digitalWrite(15, HIGH);
@@ -188,9 +175,6 @@ void jingle( int n = 0 ) {
   }
   digitalWrite(15, LOW);
 }
-
-#include <map>
-std::map< int, String > cache;
 
 void parse_command( char* json ) {
   StaticJsonBuffer<1024> jsonBuffer;
