@@ -52,6 +52,15 @@ In de gameduino 2/3 library moet je enkele aanpassingen doen zodat we de correct
 	```
 * (dit lijkt niet nodig: Zoek in bestand `GD2.h` naar `#define L2` en `#define L4` en comment deze lijnen uit.)
 
+In de PubSubClient library moet ook nog een aanpassing gebeuren om de maximum MQTT packet grootte in te stellen 1MB:
+* Wijzig in het bestand `src/PubSubClient.h`:
+	```
+	#define MQTT_MAX_PACKET_SIZE 128
+	```
+	in
+	```
+	#define MQTT_MAX_PACKET_SIZE 1024
+	```
 
 De arduino code gaat ervanuit dat je de geconverteerde [assets](../assets) mee op de sd kaart gezet hebt.
 
